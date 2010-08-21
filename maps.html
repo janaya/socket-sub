@@ -36,11 +36,26 @@
         }
         var map = new google.maps.Map(document.getElementById("map_canvas"), myOptions);
         
-        var index = 0;
-        
         var conn = {},
-        serverUri;
+            serverUri;
+        
+        var point_buffer = new Array(); 
+        var live_points  = new Array();
 
+        setInterval(function() {
+            var point = point_buffer.shift()
+            if(point) {
+                point.setMap(map);
+                map.panTo(point.getPosition());
+                live_points.push(point);
+                if(live_points.length > 20) {
+                    var old_point = live_points.shift()
+                    old_point.setVisible(false);
+                    delete old_point;
+                }
+            }
+        }, 1000);
+        
         function startConnection() {
             var host = "node.superfeedr.com",
             port = 27261;
@@ -58,14 +73,16 @@
                 };
 
                 conn.onmessage = function( event ) {
-                    var message = (typeof event.data === "string") ? event.data : JSON.parse( event.data );
-                    $.xmlDOM(message).find('feed > entry > point').each(function() {
-                        index +=1 ;
-                        // if(index == 1) {
+                    if(point_buffer.length < 30 ) {
+                        var message = (typeof event.data === "string") ? event.data : JSON.parse( event.data );
+                        $.xmlDOM(message).find('feed > entry > point').each(function() {
                             var latlon = $(this).text().split(" ");
-                            map.panTo(new google.maps.LatLng(parseFloat(latlon[0]), parseFloat(latlon[1])));
-                        // }
-                    });
+                            myLatLng = new google.maps.LatLng(parseFloat(latlon[0]), parseFloat(latlon[1]));
+                            point_buffer.push(new google.maps.Marker({ 
+                                position: myLatLng, 
+                            }));
+                        });
+                    }
                 };
 
                 conn.onclose = function( event ) {
