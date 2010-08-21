@@ -37,18 +37,7 @@
             form = feed.form;
 
         function startConnection() {
-          // TODO: Load host info from config.json
-          // Currently, all http requests lazily return client.html.
-          //
-          // $.getJSON('config.json', function(config){
-          //   console.log(config);
-          //  var host = config.host || "localhost",
-          //      port = config.port || 27261;
-          //  serverUri = "ws://"+host+":"+port;
-          //  openConnection();
-          //});
-
-          var host = "localhost",
+          var host = "node.superfeedr.com",
               port = 27261;
           serverUri = "ws://"+host+":"+port;
           openConnection();
