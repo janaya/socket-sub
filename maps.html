@@ -5,8 +5,36 @@
     <meta http-equiv="content-type" content="text/html; charset=UTF-8"/> 
     <style type="text/css"> 
     html { height: 100% }
-    body { height: 100%; margin: 0px; padding: 0px }
-    #map_canvas { height: 100% }
+    body { 
+        height: 100%; 
+        margin: 0px; 
+        padding: 0px;
+        font-family:helvetica; 
+        background-color:#333; 
+        color: white; 
+        font-family:helvetica; 
+        font-size:0.8em;
+    }
+    #map_canvas { 
+        height: 100% 
+    }
+    #info {
+        z-index: 100;
+        width: 100%;
+        background-color:#333;
+        font-size: 1.0em;
+        position: absolute; 
+        top:0; 
+        padding:5px 10px 5px 10px;
+    }
+    #info a {
+        color: white; 
+    }
+    #info img {
+        padding: 0px 5px 0px 0px;
+        vertical-align:middle;
+        height:24px;
+    }
     </style> 
     <title></title> 
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
@@ -21,7 +49,11 @@
     </script> 
 </head> 
 <body onload="initialize()"> 
+    <div id="info">Built by <img src="http://www.gravatar.com/avatar/a2f7d4dd6df7dd59e4adab811c00a3a1?s=24"><a href="http://superfeedr.com" style="color:#CCC">Superfeedr</a> with data from <img src="http://bluwiki.com/images/8/89/IconGowallaCling.png"><a href="http://gowalla.com/">Gowalla</a>, using PubSubHubbub, Node.JS and WebSockets.
+    </div>
     <div id="map_canvas"></div> 
+    <a href="http://github.com/julien51/socket-sub"><img style="position: absolute; top: 0; right: 0; border: 0; z-index:200" src="http://s3.amazonaws.com/github/ribbons/forkme_right_orange_ff7600.png" alt="Fork me on GitHub" /></a> 
+    
     <script>
     $(document).ready(function() {
         
@@ -41,7 +73,8 @@
         
         var point_buffer = new Array(); 
         var live_points  = new Array();
-
+        
+        // Displays the points in a 1Hz frequency. Faster than this, people wouldn't see the updates.
         setInterval(function() {
             var point = point_buffer.shift()
             if(point) {
