@@ -210,29 +210,29 @@ web_server.get(config.pubsubhubbub.callback_url_path + ':socket_id/:subscription
         if(client) {
           // Connected
           if(req.query && req.query.hub && req.query.hub.mode == "subscribe") {
-            log("Confirmed subscription to" + req.params.subscription_id + " for " + req.params.socket_id)
+            log("Confirmed " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
             res.send(req.query.hub.challenge, 200);
           }
           else {
-            log("Couldn't confirm subscription to " + req.params.subscription_id + " for " + req.params.socket_id)
+            log("Couldn't confirm " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
             res.send(404);
           }
         }
         else {
           // Not connected
           if(req.query && req.query.hub && req.query.hub.mode == "unsubscribe") {
-            log("Confirmed subscription to" + req.params.subscription_id + " for " + req.params.socket_id)
+            log("Confirmed " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
             res.send(req.query.hub.challenge, 200);
           }
           else {
-            log("Couldn't confirm subscription to " + req.params.subscription_id + " for " + req.params.socket_id)
+            log("Couldn't confirm " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
             res.send(404);
           }
         }
       });
     }
     else {
-      log("Couldn't confirm subscription to " + req.params.subscription_id + " for " + req.params.socket_id)
+      log("Couldn't confirm " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
       res.send(404);
     }
 });
