@@ -2,7 +2,10 @@ h1. PubSubHubbub Web Socket Subscriber
 
 Big thanks to "dshaw":http://github.com/dshaw/socket-sub for helping me boostrap this.
 
-There is a temporary demo of this server that is running at @http://node.superfeedr.com/@. And a demo client "gracefully hosted by Github as a page":http://julien51.github.com/socket-sub/ :)
+There is a temporary demo of this server that is running at @http://node.superfeedr.com/@. And a demo client "gracefully hosted by Github as a page":http://julien51.github.com/socket-sub/. Check also "this other client":http://julien51.github.com/socket-sub/maps (using the exact same server), with some of the "Gowalla":http://gowalla.com/ checkins appear in realtime on a Google Map. (the code for both clients is available in the "gh-page branch":http://github.com/julien51/socket-sub/tree/gh-pages.)
+
+*PubSubHubbub is beautiful!*
+
 
 h2. Install and dependencies
 
