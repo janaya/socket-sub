@@ -213,12 +213,12 @@ web_server.get(config.pubsubhubbub.callback_url_path + ':feed_id', function(req,
 // Incoming POST notifications.
 // Sends the data to the right Socket, based on the subscription. Unsubscibes unused subscriptions.
 web_server.post(config.pubsubhubbub.callback_url_path + ':feed_id', function(req, res) {
-  var feed = subscriptions_store.feeds[req.params.feed_id];
-  if (feed) {
+  var feed_subs = subscriptions_store.feeds[req.params.feed_id];
+  if (feed_subs) {
     req.on('data', function(data) {
       var sockets = 0;
-      for(subscription_id in feed.subscriptions) {
-        subscription = feed.subscriptions[subscription_id];
+      for(subscription_id in feed_subs.subscriptions) {
+        subscription = feed_subs.subscriptions[subscription_id];
         ws_server.send(subscription.socket_id, data, function(socket) {
           if(socket) {
             sockets += 1;
@@ -233,12 +233,12 @@ web_server.post(config.pubsubhubbub.callback_url_path + ':feed_id', function(req
       if(sockets == 0) {
         // We haven't found any socket to send the updates too
         // Let's delete the feed
-        log("Nobody subscribed to feed " + feed.url)
-        subscribe(feed, "unsubscribe", function() {
-          log("Unsubscribed from " + feed.url);
+        log("Nobody subscribed to feed " + feed_subs.feed.url)
+        subscribe(feed_subs.feed, "unsubscribe", function() {
+          log("Unsubscribed from " + feed_subs.feed.url);
           delete subscriptions_store.feeds[req.params.feed_id];
         }, function(error) {
-          log("Couldn't unsubscribe from " + feed.url + "(" + error + ")");
+          log("Couldn't unsubscribe from " + feed_subs.feed.url + "(" + error + ")");
         }) 
         res.send(404);
       }
