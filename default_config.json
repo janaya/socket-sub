@@ -17,6 +17,5 @@
     "callback_url_path" : "/sockets/",
     "verify_mode": "sync"
   },
-  "client" : "client.html",
   "debug" : false
 }
