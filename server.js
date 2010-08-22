@@ -256,7 +256,7 @@ web_server.post(config.pubsubhubbub.callback_url_path + ':feed_id', function(req
           log("Unsubscribed from " + feed_subs.feed.url);
           delete subscriptions_store.feeds[req.params.feed_id];
         }, function(error) {
-          log("Couldn't unsubscribe from " + feed_subs.feed.url + "(" + error.trim + ")");
+          log("Couldn't unsubscribe from " + feed_subs.feed.url + "(" + error.trim() + ")");
         }) 
         res.send(404);
       }
