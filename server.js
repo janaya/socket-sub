@@ -199,9 +199,27 @@ web_server.get(config.pubsubhubbub.callback_url_path + ':feed_id', function(req,
       log("Confirmed " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
       res.send(req.query.hub.challenge, 200);
     }
-    else if (req.query.hub.mode == "unsubscribe" && (!feed || feed.subscriptions.length == 0)) {
-      log("Confirmed " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
-      res.send(req.query.hub.challenge, 200);
+    else if (req.query.hub.mode == "unsubscribe") {
+      // We need to check all the susbcribers. To make sure they're all offline
+      var sockets = 0;
+      for(subscription_id in feed.subscriptions) {
+        subscription = feed_subs.subscriptions[subscription_id];
+        ws_server.send(subscription.socket_id, "", function(socket) {
+          if(socket) {
+            sockets += 1;
+          } 
+        });
+      }
+      if(sockets == 0) {
+        // We haven't found any socket to send the updates too
+        // Let's delete the feed
+        log("Confirmed " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
+        res.send(req.query.hub.challenge, 200);
+      }
+      else {
+        log("Couldn't confirm " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
+        res.send(404);
+      }
     }
     else {
       log("Couldn't confirm " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
