@@ -234,7 +234,7 @@ web_server.post(config.pubsubhubbub.callback_url_path + ':feed_id', function(req
         // We haven't found any socket to send the updates too
         // Let's delete the feed
         log("Nobody subscribed to feed " + feed.url)
-        subscribe(feed, "unsusbcribe", function() {
+        subscribe(feed, "unsubscribe", function() {
           log("Unsubscribed from " + feed.url);
           delete subscriptions_store.feeds[req.params.feed_id];
         }, function(error) {
