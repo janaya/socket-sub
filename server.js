@@ -196,7 +196,7 @@ var web_server = express.createServer();
 web_server.get(config.pubsubhubbub.callback_url_path + ':feed_id', function(req, res) {
     var feed = subscriptions_store.feeds[req.params.feed_id];
     if (feed && req.query.hub.mode == "subscribe") {
-      log("Confirmed " + req.query.hub.mode + " to " + req.params.subscription_id + " for " + req.params.socket_id)
+      log("Confirmed " + req.query.hub.mode + " to " + feed.feed.url )
       res.send(req.query.hub.challenge, 200);
     }
     else if (feed && req.query.hub.mode == "unsubscribe") {
