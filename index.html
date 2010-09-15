@@ -56,17 +56,12 @@
     #status.failed { color:red }
     #footer {
         width: 100%;
-        background-color:#333;
         font-size:1.2em;
-        position:absolute; 
-        bottom:0; 
-        margin:0px 0px 0px 0px; 
-        padding:10px 0px 20px 0px;
     }
-    #footer a {
+    #header a {
         color: white; 
     }
-    #footer img {
+    #header img {
         padding: 0px 5px 0px 0px;
         vertical-align:middle;
         height:24px;
@@ -74,6 +69,10 @@
     </style>
 </head> 
 <body> 
+    <span id="header"> 
+        Brought to you by <img src="http://www.gravatar.com/avatar/a2f7d4dd6df7dd59e4adab811c00a3a1?s=24"><a href="http://superfeedr.com" style="color:#CCC">Superfeedr</a> and <img src="http://a2.twimg.com/profile_images/1033553922/chromed_bigger.png"><a href="http://twitter.com/dshaw">Dshaw</a>, hosted by <img src="http://www.ajax.org/siteimg/octocat.png"><a href="http://github.com/">Github</a>
+    </span> 
+    
     <h1>PubSubHubbub and WebSockets</h1>
     <ul>
         <li>PubSubHubbub is a realtime web technology that allows Server to Server communication.</li>
@@ -200,9 +199,6 @@
             }
         });
     </script>
-    <span id="footer"> 
-        Brought to you by <img src="http://www.gravatar.com/avatar/a2f7d4dd6df7dd59e4adab811c00a3a1?s=24"><a href="http://superfeedr.com" style="color:#CCC">Superfeedr</a> and <img src="http://a2.twimg.com/profile_images/1033553922/chromed_bigger.png"><a href="http://twitter.com/dshaw">Dshaw</a>, hosted by <img src="http://www.ajax.org/siteimg/octocat.png"><a href="http://github.com/">Github</a>
-    </span> 
     <a href="http://github.com/julien51/socket-sub"><img style="position: absolute; top: 0; right: 0; border: 0;" src="http://s3.amazonaws.com/github/ribbons/forkme_right_orange_ff7600.png" alt="Fork me on GitHub" /></a> 
 </body> 
 </html>
