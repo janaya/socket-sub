@@ -173,18 +173,18 @@ ws_server.addListener("connection", function(socket ) {
   // When connected
   ws_server.send(socket.id, "Awaiting feed subscription request");
   socket.addListener("message", function(json) {
-    subscription = JSON.parse(json);
+    subs = JSON.parse(json);
     // When asked to subscribe to a feed_url
+    ws_server.send(socket.id, "Subscribing to " + subs.feed_url);
+    log("\n\n---\n"+subs.hub_url+"\n---\n\n");
     
-    ws_server.send(socket.id, "Subscribing to " + subscription.feed_url);
-    
-    var subscription = subscriptions_store.subscribe(socket.id, subscription.feed_url);
-    subscribe(subscription.feed, "subscribe", subscription.hub_url, function() {
+    var subscription = subscriptions_store.subscribe(socket.id, subs.feed_url);
+    subscribe(subscription.feed, "subscribe", subs.hub_url, function() {
       log("Subscribed to " + subscription.feed_url + " for " + socket.id);
-      ws_server.send(socket.id, "Subscribed to " + subscription.feed_url);
+      ws_server.send(socket.id, "Subscribed to " + subs.feed_url);
     }, function(error) {
-      log("Failed subscription to " + subscription.feed_url + " for " + socket.id);
-      ws_server.send(socket.id, "Couldn't subscribe to " + subscription.feed_url + " : "+ error.trim() );
+      log("Failed subscription to " + subs.feed_url + " for " + socket.id);
+      ws_server.send(socket.id, "Couldn't subscribe to " + subs.feed_url + " : "+ error.trim() );
     });
   });
 });
