@@ -172,9 +172,12 @@ ws_server.addListener("listening", function() {
 ws_server.addListener("connection", function(socket ) {
   // When connected
   ws_server.send(socket.id, "Awaiting feed subscription request");
-  socket.addListener("message", function(subscription) {
+  socket.addListener("message", function(json) {
+    subscription = JSON.parse(json);
     // When asked to subscribe to a feed_url
+    
     ws_server.send(socket.id, "Subscribing to " + subscription.feed_url);
+    
     var subscription = subscriptions_store.subscribe(socket.id, subscription.feed_url);
     subscribe(subscription.feed, "subscribe", subscription.hub_url, function() {
       log("Subscribed to " + subscription.feed_url + " for " + socket.id);
