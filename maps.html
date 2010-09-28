@@ -102,7 +102,7 @@
                 conn = new WebSocket( serverUri );
 
                 conn.onopen = function () {
-                    conn.send("http://superfeedr.com/track/gowalla&hub=hub.gowalla.com");
+                    conn.send("http://hub.gowalla.com/track/gowalla");
                 };
 
                 conn.onmessage = function( event ) {
