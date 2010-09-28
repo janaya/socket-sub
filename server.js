@@ -110,7 +110,7 @@ var SubscriptionStore = function() {
 //
 // Main PubSubHubub method. Peforms the subscription and unsubscriptions
 // It uses the credentials defined earlier.
-var subscribe = function(feed, mode, callback, errback) {
+var subscribe = function(feed, mode, hub, callback, errback) {
   var params = {
     "hub.mode"      : mode,
     "hub.verify"    : config.pubsubhubbub.verify_mode,
@@ -118,8 +118,10 @@ var subscribe = function(feed, mode, callback, errback) {
     "hub.topic"     : feed.url
   };
   
+  var hub_url = hub || config.pubsubhubbub.hub;
+  
   var body = querystring.stringify(params)
-      hub = url.parse(config.pubsubhubbub.hub),
+      hub = url.parse(hub_url),
       contentLength = body.length,
       headers = {
         "Accept": '*/*',
@@ -170,16 +172,16 @@ ws_server.addListener("listening", function() {
 ws_server.addListener("connection", function(socket ) {
   // When connected
   ws_server.send(socket.id, "Awaiting feed subscription request");
-  socket.addListener("message", function(feed_url) {
+  socket.addListener("message", function(subscription) {
     // When asked to subscribe to a feed_url
-    ws_server.send(socket.id, "Subscribing to " + feed_url);
-    var subscription = subscriptions_store.subscribe(socket.id, feed_url);
-    subscribe(subscription.feed, "subscribe", function() {
-      log("Subscribed to " + feed_url + " for " + socket.id);
-      ws_server.send(socket.id, "Subscribed to " + feed_url);
+    ws_server.send(socket.id, "Subscribing to " + subscription.feed_url);
+    var subscription = subscriptions_store.subscribe(socket.id, subscription.feed_url);
+    subscribe(subscription.feed, "subscribe", subscription.hub_url, function() {
+      log("Subscribed to " + subscription.feed_url + " for " + socket.id);
+      ws_server.send(socket.id, "Subscribed to " + subscription.feed_url);
     }, function(error) {
-      log("Failed subscription to " + feed_url + " for " + socket.id);
-      ws_server.send(socket.id, "Couldn't subscribe to " + feed_url + " : "+ error.trim() );
+      log("Failed subscription to " + subscription.feed_url + " for " + socket.id);
+      ws_server.send(socket.id, "Couldn't subscribe to " + subscription.feed_url + " : "+ error.trim() );
     });
   });
 });
