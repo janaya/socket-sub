@@ -176,8 +176,6 @@ ws_server.addListener("connection", function(socket ) {
     subs = JSON.parse(json);
     // When asked to subscribe to a feed_url
     ws_server.send(socket.id, "Subscribing to " + subs.feed_url);
-    log("\n\n---\n"+subs.hub_url+"\n---\n\n");
-    
     var subscription = subscriptions_store.subscribe(socket.id, subs.feed_url);
     subscribe(subscription.feed, "subscribe", subs.hub_url, function() {
       log("Subscribed to " + subscription.feed_url + " for " + socket.id);
