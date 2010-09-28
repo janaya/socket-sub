@@ -190,7 +190,8 @@
 
                     // if web socket connected
                     if (conn.readyState === 1) {
-                        conn.send(feed.value);
+                        var connection = {"feed_url": feed.value, "hub_url": "http://superfeedr.com/hubbub"};
+                        conn.send(JSON.stringify(connection));
                         feed.value = "";
                     }
                 }, false);
