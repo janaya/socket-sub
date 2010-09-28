@@ -102,7 +102,8 @@
                 conn = new WebSocket( serverUri );
 
                 conn.onopen = function () {
-                    conn.send("http://hub.gowalla.com/track/gowalla");
+                    var connection = {"feed_url": "http://hub.gowalla.com/track/gowalla", "hub": "http://hub.gowalla.com/"};
+                    conn.send(connection);
                 };
 
                 conn.onmessage = function( event ) {
