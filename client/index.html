@@ -1,0 +1,121 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
+   "http://www.w3.org/TR/html4/loose.dtd"> 
+<html lang="en"> 
+  <head> 
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"> 
+    <title>Test</title> 
+    <script type="text/javascript" src="http://www.google.com/jsapi"></script>  
+    <script type="text/javascript">  
+      google.load("jquery", "1.4.1");
+      google.load("jqueryui", "1.7.2");
+    </script> 
+<!--    <script type="text/javascript" src="websocket.js"></script>-->
+  </head> 
+ 
+  <body> 
+<!--<iframe style="display:none;" type="text/html"
+      src=""> 
+</iframe>--> 
+<!--    <script type="text/javascript" src="websocket.js"></script>-->
+    
+
+    <script type="text/javascript">
+    
+function getMethods(obj) {
+  var result = [];
+  for (var id in obj) {
+    try {
+      if (typeof(obj[id]) == "function") {
+        result.push(id + ": " + obj[id].toString());
+      }
+    } catch (err) {
+      result.push(id + ": inaccessible");
+    }
+  }
+  return result;
+}    
+    
+      var conn = {};
+      var host = "vmuss11.deri.ie",
+          port = 8080;
+      var serverUri = "ws://"+host+":"+port;
+//      var feed        = document.getElementById('feed'),
+//          form        = feed.form;
+
+    
+      if (!window.WebSocket) {
+        console.debug("sockets not supported");
+        // TODO: advice sockets not supported
+        // if behind a firewall:
+        //   advice can not subscribe nor get updates
+        // else:
+        //   if want to subscribe (in add/following/x):
+        //     call php function
+      } else {
+        console.debug("sockets supported");
+        conn = new WebSocket( serverUri );
+        console.debug(conn.readyState);
+        console.debug(getMethods(conn).join("\n"));
+        
+          conn.onopen = function () {
+            console.debug("Socket opened");
+            console.debug(conn.readyState);
+            // while not solved that real hub subscription is done per socket:
+            //   subscribe again followings:
+            //   $followings = SMOBTools::followings();
+            //   foreach($followings as $following) {
+            //     var connection = {"hub.mode":"subscribe","hub.verify":"async","hub.callback":"<?php echo SMOB_ROOT.'callback'; ?>","hub.topic": "<?php echo $following['uri']; ?>"};
+            //     conn.send(JSON.stringify(connection));
+            //     $.get("add/following/$following['uri']", string, function(data){
+            //       console.debug("adding following...");
+            //     });
+          };
+
+          conn.onmessage = function( event ) {
+            var string = event.data;
+            //$('#messages').prepend("<pre class='sh_xml'><code>"+ code + "</code></pre>");
+            //sh_highlightDocument(); 
+            //if($('#messages').children().size() > 5) {
+            //    $('#messages pre:last-child').remove();
+            //}
+            console.debug(string); 
+            
+            // received a feed update
+            if (string.indexOf("xml")==2) {
+              console.debug("received xml");
+              // send the data to the php callback
+              $.post("callback/", string, function(data){
+                console.debug("sent feed update to the php callback");
+                if(data) {
+                }
+              });
+            }
+            
+          };
+
+          conn.onclose = function( event ) {
+            console.debug("socket closed");
+          };
+      }    
+    </script>
+    <div id="full"> 
+      <div id="header"> 
+<!--        <h1><a href="http://localhost/pshbws/">Test</a></h1> -->
+      </div> 
+      <div id="main"> 
+        <div class="left">
+            <form> 
+            Are you sure you want to follow?
+            <input type="submit" id="feed" value="Yes" /> 
+            </form> 
+        </div> 
+        <div class="right"> 
+        </div> 
+        <div style="clear: both;"> </div> 
+        </div> 
+        <div id="footer"> 
+        </div> 
+    </div> 
+  </body> 
+</html> 
+ 
