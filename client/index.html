@@ -9,6 +9,7 @@
       google.load("jquery", "1.4.1");
       google.load("jqueryui", "1.7.2");
     </script> 
+    <script type="text/javascript" src="jquery.cookie.js"></script>
 <!--    <script type="text/javascript" src="websocket.js"></script>-->
   </head> 
  
@@ -34,9 +35,28 @@ function getMethods(obj) {
   }
   return result;
 }    
-    
+
+function readCookie(name) {
+	var nameEQ = name + "=";
+	var ca = document.cookie.split(';');
+	for(var i=0;i < ca.length;i++) {
+		var c = ca[i];
+		while (c.charAt(0)==' ') c = c.substring(1,c.length);
+		if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+	}
+	return null;
+}    
+function createCookie(name,value,days) {
+	if (days) {
+		var date = new Date();
+		date.setTime(date.getTime()+(days*24*60*60*1000));
+		var expires = "; expires="+date.toGMTString();
+	}
+	else var expires = "";
+	document.cookie = name+"="+value+expires+"; path=/";
+}
       var conn = {};
-      var host = "vmuss11.deri.ie",
+      var host = "localhost",
           port = 8080;
       var serverUri = "ws://"+host+":"+port;
 //      var feed        = document.getElementById('feed'),
@@ -57,46 +77,70 @@ function getMethods(obj) {
         console.debug(conn.readyState);
         console.debug(getMethods(conn).join("\n"));
         
-          conn.onopen = function () {
-            console.debug("Socket opened");
-            console.debug(conn.readyState);
-            // while not solved that real hub subscription is done per socket:
-            //   subscribe again followings:
-            //   $followings = SMOBTools::followings();
-            //   foreach($followings as $following) {
-            //     var connection = {"hub.mode":"subscribe","hub.verify":"async","hub.callback":"<?php echo SMOB_ROOT.'callback'; ?>","hub.topic": "<?php echo $following['uri']; ?>"};
-            //     conn.send(JSON.stringify(connection));
-            //     $.get("add/following/$following['uri']", string, function(data){
-            //       console.debug("adding following...");
-            //     });
-          };
+        conn.onopen = function () {
+          console.debug("Socket opened");
+          console.debug(conn.readyState);
+          // while not solved that real hub subscription is done per socket:
+          //   subscribe again followings:
+          //   $followings = SMOBTools::followings();
+          //   foreach($followings as $following) {
+          //     var connection = {"hub.mode":"subscribe","hub.verify":"async","hub.callback":"<?php echo SMOB_ROOT.'callback'; ?>","hub.topic": "<?php echo $following['uri']; ?>"};
+          //     conn.send(JSON.stringify(connection));
+          //     $.get("add/following/$following['uri']", string, function(data){
+          //       console.debug("adding following...");
+          //     });
+          //var rediskey = GetCookie('rediskey'); // http://msdn.microsoft.com/en-us/library/ms533693(v=vs.85).aspx
+          //var rediskey = $cookie('rediskey');
+          
+          // CHECK IF COOKIE IN BROWSER
+          var rediskey = readCookie('rediskey');
+          if (rediskey) {
+            console.debug("found cookie");
+            console.debug(rediskey);
+            // SEND COOKIE TO WEB SOCKET SERVER
+            conn.send(JSON.stringify({"rediskey": rediskey}));
+          } else {
+            // ASK A COOKIE TO WEB SOCKET SERVER
+            console.debug("no cookie");
+            conn.send(JSON.stringify({"rediskey": 0}));
+          }
+        };
 
-          conn.onmessage = function( event ) {
-            var string = event.data;
-            //$('#messages').prepend("<pre class='sh_xml'><code>"+ code + "</code></pre>");
-            //sh_highlightDocument(); 
-            //if($('#messages').children().size() > 5) {
-            //    $('#messages pre:last-child').remove();
-            //}
-            console.debug(string); 
-            
-            // received a feed update
-            if (string.indexOf("xml")==2) {
-              console.debug("received xml");
-              // send the data to the php callback
-              $.post("callback/", string, function(data){
-                console.debug("sent feed update to the php callback");
-                if(data) {
-                }
-              });
-            }
-            
-          };
+        conn.onmessage = function( event ) {
+          var string = event.data;
+          //$('#messages').prepend("<pre class='sh_xml'><code>"+ code + "</code></pre>");
+          //sh_highlightDocument(); 
+          //if($('#messages').children().size() > 5) {
+          //    $('#messages pre:last-child').remove();
+          //}
+          console.debug(string); 
+          
+          // received a feed update
+          if (string.indexOf("xml")==2) {
+            console.debug("received xml");
+            // send the data to the php callback
+            $.post("callback/", string, function(data){
+              console.debug("sent feed update to the php callback");
+              if(data) {
+              }
+            });
+          }
+          // RECEIVED COOKIE FROM WEB SOCKET SERVER
+          if (string.indexOf("rediskey")==2) {
+            var rediskey = JSON.parse(string).rediskey;
+            console.debug(rediskey);
+            //SetCookie('rediskey', rediskey);
+            //$.cookie('resdiskey', rediskey, { secure: true });
+            //document.cookie = 'rediskey='+rediskey;
+            createCookie('rediskey',rediskey,255);
+          }
+          
+        };
 
-          conn.onclose = function( event ) {
-            console.debug("socket closed");
-          };
-      }    
+        conn.onclose = function( event ) {
+          console.debug("socket closed");
+        };
+    }    
     </script>
     <div id="full"> 
       <div id="header"> 

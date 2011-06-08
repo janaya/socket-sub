@@ -102,6 +102,20 @@ var SubscriptionStore = function() {
 };
 
 
+function getMethods(obj) {
+  var result = [];
+  for (var id in obj) {
+    try {
+      if (typeof(obj[id]) == "function") {
+        result.push(id + ": " + obj[id].toString());
+      }
+    } catch (err) {
+      result.push(id + ": inaccessible");
+    }
+  }
+  return result;
+}    
+
 //////////////////////////////////////////////////////////////////////////////////////////
 //                              PubSubHubbub                                            //
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -168,23 +182,31 @@ var subscribe = function(feed, mode, hub, callback, errback) {
 
 // Web Socket Server ---- (server <-> browser) --------------------------------------
 var ws_server = ws.createServer({ debug: config.debug });
+//log(getMethods(ws_server).join("\n"));
 var store  = new express.session.MemoryStore;
-ws_server.use(express.cookieParser());
-ws_server.use(express.session({ secret: 'something', store: store }));
+//ws_server.use(express.cookieParser());
+//ws_server.use(express.session({ secret: 'something', store: store }));
 //var RedisStore = require('connect-redis');
 //app.use(express.cookieParser());
 //app.use(express.session({ secret: "keyboard cat", store: new RedisStore }));
 
-ws_server.addListener("listening", function() {
+ws_server.addListener("listening", function(req, res) {
   var hostInfo = config.websocket.listen.host + ":" + config.websocket.listen.port.toString();
   log("Listening to WebSocket connections on ws://" + hostInfo);
+  //log(req);
+  //log(res);
+  //ws_server.cookie("sid", '1'); 
+  //ws_server.send({rediskey: "1"});
 });
 
 // Handle Web Sockets when they connect
 ws_server.addListener("connection", function(socket ) {
   // When connected
-  log(socket.id);
-  ws_server.send(socket.id, "Awaiting feed subscription request");
+  //log(getMethods(socket).join("\n"));
+  //log(socket.listener.server.session);
+  //log(socket.listeners);
+  //ws_server.send(socket.id, "Awaiting feed subscription request");
+  //ws_server.send(socket.id, {"cookie":"12345"});
   
    //socket.once('message', function(sid) {
    // store.get(sid, function(err, session) {
@@ -193,19 +215,46 @@ ws_server.addListener("connection", function(socket ) {
    //     return;
    //   }
   
-  socket.addListener("message", function(json) {
-    subs = JSON.parse(json);
-    log(json);
+  socket.addListener("message", function(mes) {
+    log(mes);
+    log(mes.indexOf("{"));
+    if (mes[0]="{") {
+      // RECEIVED JSON
+      json = JSON.parse(mes);
+      
+      log(json.rediskey);
+      if(json.hasOwnProperty("rediskey")) {
+        // RECEIVED COOKIE
+        if(json.rediskey) {
+          log("received cookie");
+          log(json.rediskey);
+            //fetch session info from redis
+  //          redisclient.get(json.rediskey, function(e, c) {
+  //              client.user_logged_in = c.username;
+  //         });
+        
+        } else {
+          log("no cookie, generate one");
+          // generate cookie and store
+          ws_server.send(socket.id,JSON.stringify({"rediskey": "1"}));
+        }
+      }
+      
+      // 
+    }
+
+    ws_server.send(socket.id, "Bye");
+//    subs = JSON.parse(json);
     // When asked to subscribe to a feed_url
-    ws_server.send(socket.id, "Subscribing to " + subs.feed_url);
-    var subscription = subscriptions_store.subscribe(socket.id, subs.feed_url);
-    subscribe(subscription.feed, "subscribe", subs.hub_url, function() {
-      ws_server.send(socket.id, "Subscribed to " + subs.feed_url);
-      log("Subscribed to " + subscription.feed.url + subs.feed_url + " for " + socket.id);
-    }, function(error) {
-      ws_server.send(socket.id, "Couldn't subscribe to " + subs.feed_url + " : "+ error.trim() );
-      log("Failed subscription to " + subs.feed_url + " for " + socket.id);
-    });
+//    ws_server.send(socket.id, "Subscribing to " + subs.feed_url);
+//    var subscription = subscriptions_store.subscribe(socket.id, subs.feed_url);
+//    subscribe(subscription.feed, "subscribe", subs.hub_url, function() {
+//      ws_server.send(socket.id, "Subscribed to " + subs.feed_url);
+//      log("Subscribed to " + subscription.feed.url + subs.feed_url + " for " + socket.id);
+//    }, function(error) {
+//      ws_server.send(socket.id, "Couldn't subscribe to " + subs.feed_url + " : "+ error.trim() );
+//      log("Failed subscription to " + subs.feed_url + " for " + socket.id);
+//    });
   });
 });
 
