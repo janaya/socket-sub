@@ -10,10 +10,13 @@
       google.load("jqueryui", "1.7.2");
     </script> 
     <script type="text/javascript" src="jquery.cookie.js"></script>
+    <script src="http://cdn.socket.io/stable/socket.io.js"></script>
 <!--    <script type="text/javascript" src="websocket.js"></script>-->
   </head> 
  
   <body> 
+<!--iframe does not solve reconnecting socket for new pages -->
+<!--TODO: modify app in order that all functionality is in the same page via ajax? -->
 <!--<iframe style="display:none;" type="text/html"
       src=""> 
 </iframe>--> 
@@ -22,19 +25,10 @@
 
     <script type="text/javascript">
     
-function getMethods(obj) {
-  var result = [];
-  for (var id in obj) {
-    try {
-      if (typeof(obj[id]) == "function") {
-        result.push(id + ": " + obj[id].toString());
-      }
-    } catch (err) {
-      result.push(id + ": inaccessible");
-    }
-  }
-  return result;
-}    
+///////////////////////////////////////////////////////////////////////////////
+// Helper functions
+// TODO: move to another file
+///////////////////////////////////////////////////////////////////////////////
 
 function readCookie(name) {
 	var nameEQ = name + "=";
@@ -55,31 +49,41 @@ function createCookie(name,value,days) {
 	else var expires = "";
 	document.cookie = name+"="+value+expires+"; path=/";
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// Socket code
+// TODO: move to a function?
+///////////////////////////////////////////////////////////////////////////////
+
       var conn = {};
       var host = "localhost",
           port = 8080;
       var serverUri = "ws://"+host+":"+port;
+      // REAL TIME PAGE REFRESH
+      // TODO: authomaticaly include publisher notfications in the page
 //      var feed        = document.getElementById('feed'),
 //          form        = feed.form;
 
-    
+      // CHECK WHETHER SOCKETS SUPPORTED    
       if (!window.WebSocket) {
         console.debug("sockets not supported");
         // TODO: advice sockets not supported
         // if behind a firewall:
-        //   advice can not subscribe nor get updates
+        //   advice it can not subscribe nor get updates
         // else:
         //   if want to subscribe (in add/following/x):
         //     call php function
       } else {
         console.debug("sockets supported");
-        conn = new WebSocket( serverUri );
-        console.debug(conn.readyState);
-        console.debug(getMethods(conn).join("\n"));
         
-        conn.onopen = function () {
+        // CREATE NEW SOCKET
+        conn = new WebSocket( serverUri );
+        var conn = new io.Socket(host,{port: port});
+        conn.connect(); 
+        
+        // ON SOCKET STABLISHED
+        conn.on('connect',function() {
           console.debug("Socket opened");
-          console.debug(conn.readyState);
           // while not solved that real hub subscription is done per socket:
           //   subscribe again followings:
           //   $followings = SMOBTools::followings();
@@ -89,62 +93,62 @@ function createCookie(name,value,days) {
           //     $.get("add/following/$following['uri']", string, function(data){
           //       console.debug("adding following...");
           //     });
-          //var rediskey = GetCookie('rediskey'); // http://msdn.microsoft.com/en-us/library/ms533693(v=vs.85).aspx
-          //var rediskey = $cookie('rediskey');
           
-          // CHECK IF COOKIE IN BROWSER
-          var rediskey = readCookie('rediskey');
-          if (rediskey) {
+          // CHECK WHETHER COOKIE IN BROWSER
+          var subscriberSID= readCookie('SID');
+          if (subscriberSID) {
             console.debug("found cookie");
-            console.debug(rediskey);
+            console.debug(subscriberSID);
             // SEND COOKIE TO WEB SOCKET SERVER
-            conn.send(JSON.stringify({"rediskey": rediskey}));
+            conn.send({SID: subscriberSID});
+            console.debug("sent cookie");
           } else {
-            // ASK A COOKIE TO WEB SOCKET SERVER
+            // ASK FOR A COOKIE TO WEB SOCKET SERVER
             console.debug("no cookie");
-            conn.send(JSON.stringify({"rediskey": 0}));
+            conn.send({SID: 0});
           }
-        };
+        });
 
-        conn.onmessage = function( event ) {
-          var string = event.data;
+        // ON MESSAGE RECEIVED
+        conn.on('message',function(data) {
+          var string = data;
+          console.debug("mesage received");
+
+          // REAL TIME PAGE REFRESH
           //$('#messages').prepend("<pre class='sh_xml'><code>"+ code + "</code></pre>");
           //sh_highlightDocument(); 
           //if($('#messages').children().size() > 5) {
           //    $('#messages pre:last-child').remove();
           //}
-          console.debug(string); 
+          console.debug(string);
           
-          // received a feed update
-          if (string.indexOf("xml")==2) {
-            console.debug("received xml");
-            // send the data to the php callback
-            $.post("callback/", string, function(data){
-              console.debug("sent feed update to the php callback");
-              if(data) {
-              }
-            });
-          }
-          // RECEIVED COOKIE FROM WEB SOCKET SERVER
-          if (string.indexOf("rediskey")==2) {
-            var rediskey = JSON.parse(string).rediskey;
-            console.debug(rediskey);
-            //SetCookie('rediskey', rediskey);
-            //$.cookie('resdiskey', rediskey, { secure: true });
-            //document.cookie = 'rediskey='+rediskey;
-            createCookie('rediskey',rediskey,255);
+          try {
+            // MESSAGE IS JSON
+            json = JSON.parse(string);
+            console.debug(json);
+            if ( json.SID ) {
+              console.debug(json.SID);
+              createCookie("SID",json.SID);
+              console.debug("stored cookie");
+            };
+          } catch(err) {
+            // MESSAGE IS NOT JSON
+            console.debug("no json", err);
           }
           
-        };
+        });
 
-        conn.onclose = function( event ) {
+        // DISCONNECT 
+        conn.on('disconnect',function() {
           console.debug("socket closed");
-        };
+        });
     }    
     </script>
+
+
+
     <div id="full"> 
       <div id="header"> 
-<!--        <h1><a href="http://localhost/pshbws/">Test</a></h1> -->
       </div> 
       <div id="main"> 
         <div class="left">

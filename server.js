@@ -5,8 +5,22 @@ var fs = require("fs"),
     querystring = require("querystring"),
     url = require("url"),
     base64 = require("./deps/base64"),
-    ws = require('./deps/node-websocket-server/lib/ws');
+    //ws = require('./deps/node-websocket-server/lib/ws'),
+    http = require('http'), 
+    //uuid = require('uuid-pure').newId,
+    Crypto = require('crypto'),
+    io = require('socket.io');
 
+var MemoryStore = require('connect').session.MemoryStore
+var session_store = new MemoryStore();
+
+var SubscriptionsStore= require('./subscriptions-mongodb').SubscriptionsStore;
+// TODO: store subscriptions in peristant storage
+//var RedisStore = require('connect-redis');
+//var session_store = new RedisStore;
+//({ reapInterval: 60000 * 10 });
+//var Store = require('connect').session.Store,
+//    redis = require('./redis');
 
 var config = JSON.parse(fs.readFileSync("./config.json", "utf8") ) || JSON.parse(fs.readFileSync("./default_config.json", "utf8") );
 
@@ -16,287 +30,170 @@ var log = function(message) {
   }
 };
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//                              Object Definitions                                      //
-//////////////////////////////////////////////////////////////////////////////////////////
+var hub_subscribe = require('./subscriptions-mongodb');
+///////////////////////////////////////////////////////////////////////////////
+//                              Socket server - client communication         //
+///////////////////////////////////////////////////////////////////////////////
 
-//
-// Feed object
-var Feed = function(url) {
-  this.url = url;
-  this.id = base64.encode(url);
-  this.callback_url = config.pubsubhubbub.callback_url_root + config.pubsubhubbub.callback_url_path + this.id;
-}
+//var app = express.createServer(function(){ 
+//});
 
-//
-// Subscription object
-var Subscription = function(socket_id, feed ) {
-  this.socket_id = socket_id;
-  this.feed = feed; 
-};
-
-//
-// Subscription store. We may want to persist it later, but right now, it's in memory.
-// Which means that the server will probably eat a lot of memory when there are a lot of client connected and/or a lot of feeds susbcribed
-var SubscriptionStore = function() {
-  this.feeds = {};
-  
-  //
-  // Delete the subscription for this socket id and feed id. If all susbcriptions have been deleted for this socket id, delete the it too.
-  this.delete_subscription = function(feed_id, socket_id) {
-    var feed = this.feeds[feed_id];
-    if(feed) {
-      subscription = feed.subscriptions[socket_id];
-      if(subscription) {
-        delete feed.subscriptions[socket_id];
-        if(feed.subscriptions.length == 0) {
-          delete this.feeds[feed_id];
-        }
-        return true
-      }
-      else {
-        if(feed.subscriptions.length == 0) {
-          delete this.feeds[feed_id];
-        }
-        return false
-      }
-    }
-    else {
-      return false;
-    }
-  }
-
-  // 
-  // Creates (or just returns) a new subscription for this socket id and this feed url
-  this.subscribe = function(socket_id, url) {
-    var feed = new Feed(url)
-    if(!this.feeds[feed.id]) {
-      // The feed doesn't exist yet
-      this.feeds[feed.id] = {
-        subscriptions : {},
-        feed: feed
-      }
-    }
-    if(!this.feeds[feed.id].subscriptions[socket_id]) {
-      var subscription = new Subscription(socket_id, feed);
-      this.feeds[feed.id].subscriptions[socket_id] = subscription;
-      return subscription;
-    }
-    else {
-      return this.feeds[feed.id].subscriptions[socket_id];
-    }
-  }
-  
-  //
-  // Returns the subscription for this socket id and feed id
-  this.subscription = function(socket_id, feed_id) {
-    var feed = this.feeds[feed_id];
-    if(feed) {
-      return feed.subscriptions[socket_id];
-    }
-    else {
-      return false;
-    }
-  }
-  
-};
-
-
-function getMethods(obj) {
-  var result = [];
-  for (var id in obj) {
-    try {
-      if (typeof(obj[id]) == "function") {
-        result.push(id + ": " + obj[id].toString());
-      }
-    } catch (err) {
-      result.push(id + ": inaccessible");
-    }
-  }
-  return result;
-}    
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//                              PubSubHubbub                                            //
-//////////////////////////////////////////////////////////////////////////////////////////
-
-
-//
-// Main PubSubHubub method. Peforms the subscription and unsubscriptions
-// It uses the credentials defined earlier.
-var subscribe = function(feed, mode, hub, callback, errback) {
-  log("Called subscribe");
-  var params = {
-    "hub.mode"      : mode,
-    "hub.verify"    : config.pubsubhubbub.verify_mode,
-    "hub.callback"  : feed.callback_url,
-    "hub.topic"     : feed.url
-  };
-  
-  var hub_url = hub || config.pubsubhubbub.hub;
-  
-  var body = querystring.stringify(params)
-      hub = url.parse(hub_url),
-      contentLength = body.length,
-      headers = {
-        "Accept": '*/*',
-//        "Authorization": "Basic "+ base64.encode(config.pubsubhubbub.username + ":" + config.pubsubhubbub.password),
-        "Content-Length": contentLength,
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Host": hub.hostname,
-        "User-Agent": "Socket-Sub for Node.js",
-        "Connection": "close"
-      };
-  log("request body: " + body);
-  var client  = http.createClient(hub.port || 80, hub.hostname );
-  var request = client.request("POST", hub.pathname + (hub.search || ""), headers);
-  log("hub.pathname: " + hub.pathname)
-  request.write(body, 'utf8');
-
-  request.addListener("response", function(response) {
-    log("in request.addListener response");
-    var body = "";
-    response.addListener("data", function(chunk) {
-        body += chunk;
-        log("in request.addListener data");
-        log("body: " + body);
-    });
-    response.addListener('end', function() {
-      log("in request.addListener end");
-      if(response.statusCode == (202 || 204)) {
-        log("response.statusCode: " + response.statusCode);
-        callback();
-      }
-      else {
-        errback(body);
-      }
-    });
-  });
-  request.end(); // Actually Perform the request
-}
-
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//                              Let's get started                                       //
-//////////////////////////////////////////////////////////////////////////////////////////
-
-// Web Socket Server ---- (server <-> browser) --------------------------------------
-var ws_server = ws.createServer({ debug: config.debug });
-//log(getMethods(ws_server).join("\n"));
-var store  = new express.session.MemoryStore;
-//ws_server.use(express.cookieParser());
-//ws_server.use(express.session({ secret: 'something', store: store }));
-//var RedisStore = require('connect-redis');
+// TODO: store subscriptions in peristant storage
+//app.configure(function () {});
+////app.use(express.session({ store: session_store }));
+//app.use(express.bodyParser());
 //app.use(express.cookieParser());
-//app.use(express.session({ secret: "keyboard cat", store: new RedisStore }));
+////app.use(express.session({ secret: "keyboard cat", store: new RedisStore }));\
 
-ws_server.addListener("listening", function(req, res) {
-  var hostInfo = config.websocket.listen.host + ":" + config.websocket.listen.port.toString();
-  log("Listening to WebSocket connections on ws://" + hostInfo);
-  //log(req);
-  //log(res);
-  //ws_server.cookie("sid", '1'); 
-  //ws_server.send({rediskey: "1"});
+var app = express.createServer(
+  express.bodyParser(),
+  express.cookieParser(),
+  //express.session({ secret: "keyboard cat", store: new RedisStore })
+  express.session({ secret: "keyboard cat", store: session_store })
+);
+
+var subscriptionsStore= new SubscriptionsStore('localhost', 27017);
+
+//app.listen(config.websocket.listen.port);
+app.listen(config.websocket.listen.port, function () {
+  var addr = app.address();
+  log('app listening on http://' + addr.address + ':' + addr.port);
 });
 
-// Handle Web Sockets when they connect
-ws_server.addListener("connection", function(socket ) {
-  // When connected
-  //log(getMethods(socket).join("\n"));
-  //log(socket.listener.server.session);
-  //log(socket.listeners);
-  //ws_server.send(socket.id, "Awaiting feed subscription request");
-  //ws_server.send(socket.id, {"cookie":"12345"});
+var ws_server = io.listen(app);
+log("socket server listening");
+
+// ON SOCKET STABLISHED
+ws_server.on("connection", function(client) {
+  log("On connection");
+  log("Client.sessionid: ");
+  log(client.sessionId); 
+  // TODO: how to get the cookie header sent in the first request together with the upgrade header?
+  // TODO: check that headers.cookie only stores the first client cookie
+  log(client.request.headers.cookie);
   
-   //socket.once('message', function(sid) {
-   // store.get(sid, function(err, session) {
-   //   if (err || !session) {
-        // Do some error handling, bail.
-   //     return;
-   //   }
+  // if using express server (req, res), session-cookies management could be: 
+  //req.session.regenerate...
+  //res.header('Set-Cookie', 'cookiekey=cookievalue'); 
+  //res.cookie(key, value);
+  //req.session = {user:name);
+  //if (req.session.user){
   
-  socket.addListener("message", function(mes) {
-    log(mes);
-    log(mes.indexOf("{"));
-    if (mes[0]="{") {
-      // RECEIVED JSON
-      json = JSON.parse(mes);
+  // However client.request... or client.listener... is not directly attached to the client object and always point to the last logged in user!
+  //var cookie_string = client.request.headers.cookie;
+  //var parsed_cookies = express.utils.parseCookie(cookie_string);
+  //var connect_sid = parsed_cookies['express.sid'];
+  //if (connect_sid) {
+  //  session_store.get(connect_sid, function (error, session) {
+  //    //HOORAY NOW YOU'VE GOT THE SESSION OBJECT!!!!
+  //  });
+  //}
+  //var session = client.listener.server.viewHelpers; 
+  
+  // ON FIRST MESSAGE RECEIVED
+  client.once("message", function(data) {
+    log("Message received: ");
+    log(data);
+    
+    // COOKIE RECEIVED
+    if (data.SID) {
+      log("cookie received: ");
+      log(data.SID);
       
-      log(json.rediskey);
-      if(json.hasOwnProperty("rediskey")) {
-        // RECEIVED COOKIE
-        if(json.rediskey) {
-          log("received cookie");
-          log(json.rediskey);
-            //fetch session info from redis
-  //          redisclient.get(json.rediskey, function(e, c) {
-  //              client.user_logged_in = c.username;
-  //         });
+      // TODO: use persistent storage
+      //session_store.get(data.SID, function(error, session){
+      subscriptionsStore.findBySID(data.SID, function(error, subscription){
+        // save more data in session
+        // session.pings = session.pings + 1 || 1;
+        // log("You have made " + session.pings + " pings.");
+        //session_store.set(data.cookie, session);  
         
-        } else {
-          log("no cookie, generate one");
-          // generate cookie and store
-          ws_server.send(socket.id,JSON.stringify({"rediskey": "1"}));
-        }
-      }
+        // where is the data stored in session?
+//        log("stored in session: ...");
+//        log(session);
+//        for (property in session) {
+//          log(property + ': ' + session[property]+'; ');
+//        }
+        log("found cookie in store");
+        log(subscription);
+      });
+    
+    // NO COOKIE RECEIVED
+    } else {
+      log("no cookie received");     
+      // SENT COOKIE
+      client.send(JSON.stringify({"SID": client.sessionId}) );
+      log("sent cookie");
+      subscriptionsStore.save({"SID": client.sessionId}, function(error, subscription){
+        log("cookie saved");
+        log(subscription);
+      });
       
-      // 
     }
+    
 
-    ws_server.send(socket.id, "Bye");
-//    subs = JSON.parse(json);
-    // When asked to subscribe to a feed_url
-//    ws_server.send(socket.id, "Subscribing to " + subs.feed_url);
-//    var subscription = subscriptions_store.subscribe(socket.id, subs.feed_url);
-//    subscribe(subscription.feed, "subscribe", subs.hub_url, function() {
-//      ws_server.send(socket.id, "Subscribed to " + subs.feed_url);
-//      log("Subscribed to " + subscription.feed.url + subs.feed_url + " for " + socket.id);
-//    }, function(error) {
-//      ws_server.send(socket.id, "Couldn't subscribe to " + subs.feed_url + " : "+ error.trim() );
-//      log("Failed subscription to " + subs.feed_url + " for " + socket.id);
-//    });
+    // ON FIRST MESSAGE RECEIVED
+    client.on("message", function(data) {
+      log("Message received: ");
+      log(data);
+    });
+    
   });
+  
+  // DISCONNECT
+  client.on("disconnet", function( ) {
+    log("Disconnected");
+    // Not much to do.
+    //unsubscribe !!
+  });
+
 });
 
-// Handle Web Sockets when they disconnect. 
-ws_server.addListener("close", function(socket ) {
-  // Not much to do.
-  //unsubscribe !!
-});
 
-// Web Server -------- (server <-> hub) --------------------------------------------
+
+///////////////////////////////////////////////////////////////////////////////
+//                              Web server - Hubbub communication            //
+///////////////////////////////////////////////////////////////////////////////
 var web_server = express.createServer();
 
-// PubSubHubbub verification of intent
-web_server.get(config.pubsubhubbub.callback_url_path + ':feed_id', function(req, res) {
-//web_server.get(config.pubsubhubbub.callback_url_path + ':feed_id?hub.challenge?hub.topic=?hub.mode?hub.lease_seconds', function(req, res) {
-//web_server.get(config.pubsubhubbub.callback_url_path + ':feed_id?hub.challenge=challenge&hub.topic=topic&hub.mode=mode&hub.lease_seconds=secs', function(req, res) {
-    log("in server.get");
+// WEB SERVER GET REQUESTS
+// (SUBSCRIPTION VERIFICATION)
+web_server.get(
+  config.pubsubhubbub.callback_url_path + ':feed_id', 
+  function(req, res) {
+    log("web server GET request");
     log("req.url"+req.url);
     var challenge = req.url.split("hub.challenge=")[1].split("&")[0];
-    log("challenge"+challenge);
+    log("challenge received:"+challenge);
     var mode = req.url.split("hub.mode=")[1].split("&")[0];
-    log("mode"+mode);
+    log("mode: "+mode);
     log("req.method"+req.method);
     log("req.headers.accept"+req.headers.accept);
     log("req.headers.server"+req.headers.server);
-    //log("req.params.hub_challenge"+req.params.hub_challenge);
-    //log("req.params[hub.challenge]"+req.params['hub.challenge']);
-    //log("req.params.hub.challenge"+req.params.hub.challenge);
-    var feed = subscriptions_store.feeds[req.params.feed_id];
-    log("req.params.feed_id:"+ req.params.feed_id);
-    //if (feed && req.query.hub.mode == "subscribe") {
+    
+    var feed_id =req.params.feed_id;
+    log("feed_id:"+ feed_id);
+    
+    // check subscription was requested?
+    var feed = subscriptions_store.feeds[feed_id];
+    
+    // MODE SUBSCRIBE
     if (feed && mode == "subscribe") {
       log("Confirmed " + mode + " to " + feed.feed.url )
+      // response hub server with the challenge
       res.send(challenge, 200);
-      log("Send: " + challenge);
-      //notify the publisher about the follower!
+      log("Sent: " + challenge);
+      
+      //TODO: notify the publisher about the follower!!??
     }
+    // MODE UNSUBSCRIBE
     else if (feed && mode == "unsubscribe") {
       // We need to check all the susbcribers. To make sure they're all offline
       var sockets = 0;
       for(subscription_id in feed.subscriptions) {
         subscription = feed_subs.subscriptions[subscription_id];
+        
+        //??
         ws_server.send(subscription.socket_id, "", function(socket) {
           if(socket) {
             sockets += 1;
@@ -307,6 +204,7 @@ web_server.get(config.pubsubhubbub.callback_url_path + ':feed_id', function(req,
         // We haven't found any socket to send the updates too
         // Let's delete the feed
         log("Confirmed " + mode + " to " + feed.feed.url)
+        // response hub server with the challenge
         res.send(challenge, 200);
       }
       else {
@@ -320,68 +218,73 @@ web_server.get(config.pubsubhubbub.callback_url_path + ':feed_id', function(req,
     }
 });
 
-//
-// Incoming POST notifications.
-// Sends the data to the right Socket, based on the subscription. Unsubscibes unused subscriptions.
-web_server.post(config.pubsubhubbub.callback_url_path + ':feed_id', function(req, res) {
-  log("in server post");
-  var feed_subs = subscriptions_store.feeds[req.params.feed_id];
-  log("req.params.feed_id " + req.params.feed_id);
-  if (feed_subs) {
-    req.on('data', function(data) {
-      log("in data");
-      var sockets = 0;
-      for(subscription_id in feed_subs.subscriptions) {
-        subscription = feed_subs.subscriptions[subscription_id];
-        ws_server.send(subscription.socket_id, data, function(socket) {
-          if(socket) {
-            sockets += 1;
-            log("Sent notification for " + subscription.socket_id + " for " + subscription.feed.url);
-            //socket die here: Sent notification for 58010 for http://smob.rhizomatik.net/me/rss
 
-//http.js:542
-//    throw new Error("Can't use mutable header APIs after sent.");
-//          ^
-//Error: Can't use mutable header APIs after sent.
-//    at ServerResponse.getHeader (http.js:542:11)
-//    at ServerResponse.header (/usr/local/lib/node/.npm/express/2.0.0/package/lib/response.js:226:17)
-//    at ServerResponse.send (/usr/local/lib/node/.npm/express/2.0.0/package/lib/response.js:65:17)
-//    at IncomingMessage.<anonymous> (/home/duy/socket-sub/server.js:296:13)
-//    at IncomingMessage.emit (events.js:64:17)
-//    at HTTPParser.onBody (http.js:121:23)
-//    at Socket.ondata (http.js:1001:22)
-//    at Socket._onReadable (net.js:675:27)
-//    at IOWatcher.onReadable [as callback] (net.js:177:10)
+// WEB SERVER POST REQUESTS
+// (INCOMING POST NOTIFICATIONS)
+// Sends the data to the right Socket, based on the subscription. 
+// Unsubscribes unused subscriptions.
+web_server.post(
+  config.pubsubhubbub.callback_url_path + ':feed_id', 
+  function(req, res) {
+    log("web server POST request");
+    
+    // check subscription socket id????
+    var feed_subs = subscriptions_store.feeds[req.params.feed_id];
+    log("req.params.feed_id " + req.params.feed_id);
+    if (feed_subs) {
+      req.on('data', function(data) {
+        log("in data");
+        var sockets = 0;
+        
+        // subscriptions in store????
+        for(subscription_id in feed_subs.subscriptions) {
+          subscription = feed_subs.subscriptions[subscription_id];
+          
+          // SEND NOTIFICATION TO SUBSCRIBER
+          ws_server.send(subscription.socket_id, data, function(socket) {
+          //ws_server.clientsIndex[SID].send //?
+            if(socket) {
+              sockets += 1;
+              log("Sent notification for " + subscription.socket_id + " for " + subscription.feed.url);
 
-          } 
-          else {
-            log("Looks like " + subscription.socket_id + " is offline! Removing " + subscription.feed.url + " from it");
-            //have to subscribe each time socket is not connected! :(
-            subscriptions_store.delete_subscription(subscription.feed.id, subscription.socket_id);
-          }
-        });
-      }
-      if(sockets == 0) {
-        // We haven't found any socket to send the updates too
-        // Let's delete the feed
-        log("Nobody subscribed to feed " + feed_subs.feed.url)
-        subscribe(feed_subs.feed, "unsubscribe", function() {
-          log("Unsubscribed from " + feed_subs.feed.url);
-          delete subscriptions_store.feeds[req.params.feed_id];
-        }, function(error) {
-          log("Couldn't unsubscribe from " + feed_subs.feed.url + "(" + error.trim() + ")");
-        }) 
-        res.send(404);
-      }
-      else {
-        res.send("Thanks", 200);
-      }
-    });
-  }
-  else {
-    log("Couldn't find feed " + req.params.feed_id)
-    res.send(404);
-  }
+
+            } 
+            else {
+              log("Looks like " + subscription.socket_id + " is offline! Removing " + subscription.feed.url + " from it");
+              //have to subscribe each time socket is not connected! :(
+              
+              // it should be stored to send later
+              subscriptions_store.delete_subscription(subscription.feed.id, subscription.socket_id);
+            }
+          });
+        }
+        
+        // DELETE PUBLISHERS WITHOUT SUBSCRIBERS
+        if(sockets == 0) {
+          // We haven't found any socket to send the updates too
+          // Let's delete the feed
+          log("Nobody subscribed to feed " + feed_subs.feed.url)
+          
+          // delete store
+          subscribe(feed_subs.feed, "unsubscribe", function() {
+            log("Unsubscribed from " + feed_subs.feed.url);
+            delete subscriptions_store.feeds[req.params.feed_id];
+          }, function(error) {
+            log("Couldn't unsubscribe from " + feed_subs.feed.url + "(" + error.trim() + ")");
+          }) 
+          res.send(404);
+        }
+        else {
+          res.send("Thanks", 200);
+        }
+      });
+    }
+    
+    // NO SUBSCRIPTION WITH THAT PUBLISHER
+    else {
+      log("Couldn't find feed " + req.params.feed_id)
+      res.send(404);
+    }
 });
 
 web_server.addListener("listening", function() {
@@ -394,6 +297,7 @@ web_server.get("/", function(req, res) {
 });
 
 var subscriptions_store = new SubscriptionStore(); 
+//var cookies_store = new cookieStore();
 ws_server.listen(config.websocket.listen.port, config.websocket.listen.host);
 web_server.listen(config.pubsubhubbub.listen.port, config.pubsubhubbub.listen.host);
 
