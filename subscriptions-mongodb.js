@@ -8,6 +8,19 @@
 //  }],
 //}
 
+// Example data:
+//var item1 = {SID: "1"};
+//var item2 = {SID: "2", URI: "http://localhost/smob", publishers: [{SID: "3", URI: "http://localhost/smob"},{SID: "4", URI: "http://localhost/smob2"}]};
+//db.subscriptions.save(item1);
+//db.subscriptions.save(item2);
+//db.subscriptions.find();
+//db.subscriptions.find({"publishers.URI": "http://localhost/smob"});
+//db.subscriptions.find({"publishers.URI": "http://localhost/smob"}).forEach(printjson);
+//db.subscriptions.find({"publishers.URI": "http://localhost/smob"}, {SID:1})
+//db.subscriptions.find({"publishers.URI": "http://localhost/smob"}, {SID:1, _id:0}).forEach(printjson);
+
+
+var sys = require("sys");
 //var Db= require('mongodb/db').Db,
 //    ObjectID= require('mongodb/bson/bson').ObjectID,
 //    Server= require('mongodb/connection').Server;
@@ -49,60 +62,58 @@ SubscriptionsStore.prototype.findBySID = function(SubscriberSID, callback) {
     this.getCollection(function(error, subscription_collection) {
       if( error ) callback(error)
       else {
-//        subscription_collection.findOne({_id: ObjectID.createFromHexString(id)}, function(error, result) {
         subscription_collection.findOne({SID: SubscriberSID}, function(error, result) {
           if( error ) callback(error)
-          else callback(null, result)
+          else {
+            callback(null, result);
+          }
         });
       }
     });
 };
 
-//SubscriptionsStore.prototype.save = function(subscriptions, callback) {
-//    this.getCollection(function(error, subscription_collection) {
-//      if( error ) callback(error)
-//      else {
-//        if( typeof(subscriptions.length)=="undefined")
-//          subscriptions = [subscriptions];
 
-//        for( var i =0;i< subscriptions.length;i++ ) {
-//          subscription = subscriptions[i];
-//          if( subscription.publishers === undefined ) subscription.publishers = [];
-//          for(var j =0;j< subscription.publishers.length; j++) {
-//          }
-//        }
-
-//        subscription_collection.insert(subscriptions, function() {
-//          callback(null, subscriptions);
-//        });
-//      }
-//    });
-//};
-
-SubscriptionsStore.prototype.save = function(subscription, callback) {
+SubscriptionsStore.prototype.findByPublisherURI = function(PublisherURI, callback) {
     this.getCollection(function(error, subscription_collection) {
       if( error ) callback(error)
       else {
-//        s = SubscriptionsStore.findBySID(subscription.SID);
-//        if (s == null) {
-//          if( subscription.publishers === undefined ) subscription.publishers = [];
-
-//          subscription_collection.insert(subscriptions, function() {
-//            callback(null, subscription);
-//          });
-//        } else {
-//            callback(null, s);
-//        }
-        
-        subscription_collection.findOne({SID: subscription.SID}, function(error, result) {
-          if( error ) {
-            if( subscription.publishers === undefined ) subscription.publishers = [];
-
-            subscription_collection.insert(subscriptions, function() {
-              callback(null, subscription);
+        subscription_collection.find({"publishers.URI": PublisherURI}, {SID:1, _id:0}, function(error, cursor) {
+          if( error ) callback(error)
+          else {
+//            for (subscriber in cursor) {
+//            
+//            }
+            cursor.toArray(function(error, results) {
+              if( error ) callback(error)
+              else callback(null, results)
             });
           }
-          else callback(null, result)
+        });
+      }
+    });
+};
+
+SubscriptionsStore.prototype.save = function(subscription, callback) {
+    this.getCollection(function(error, subscription_collection) {
+      sys.puts("got collection "+subscription_collection);
+      if( error ) callback(error)
+      else {        
+        subscription_collection.findOne({SID: subscription.SID}, function(error, result) {
+          if( error ) callback(error)
+          else {
+            sys.puts("no error in find");
+            if (result) {
+              sys.puts("result "+result);
+              callback(null, result);
+            } else {
+              if( subscription.publishers === undefined ) subscription.publishers = [];
+
+              subscription_collection.insert(subscription, function() {
+                sys.puts("subscription:  "+subscription);
+                callback(null, subscription);
+              });
+            }
+          }
         });
         
       }
@@ -110,16 +121,21 @@ SubscriptionsStore.prototype.save = function(subscription, callback) {
 };
 
 SubscriptionsStore.prototype.addPublisherToSubscriber = function(subscriberSID, publisher, callback) {
+  sys.puts(subscriberSID, publisher.URI);
   this.getCollection(function(error, subscription_collection) {
     if( error ) callback( error );
     else {
+      sys.puts("got collection "+subscription_collection);
       subscription_collection.update(
         //{_id: ObjectID.createFromHexString(subscriptionId)},
         {SID: subscriberSID},
         {"$push": {publishers: publisher}},
         function(error, subscription){
           if( error ) callback(error);
-          else callback(null, subscription)
+          else {
+            sys.puts("subscription:  "+subscription);
+            callback(null, subscription);
+          }
         });
     }
   });
