@@ -1,22 +1,30 @@
-
+var fs = require("fs"),
+    express = require("express"),
+    sys = require("sys"),
+    http = require("http")
+    querystring = require("querystring"),
+    url = require("url"),
+    base64 = require("./deps/base64");
+var config = JSON.parse(fs.readFileSync("./config.json", "utf8") ) || JSON.parse(fs.readFileSync("./default_config.json", "utf8") );
+var log = function(message) {
+  if(config.debug) {
+    sys.puts(message);
+  }
+};
 //////////////////////////////////////////////////////////////////////////////////////////
 //                              PubSubHubbub                                            //
 //////////////////////////////////////////////////////////////////////////////////////////
 
-
 //
 // Main PubSubHubub method. Peforms the subscription and unsubscriptions
 // It uses the credentials defined earlier.
-var subscribe = function(feed, mode, hub, callback, errback) {
-  log("Called subscribe");
+var subscribe = function(hub_url, mode, verify, callback_url, topic, callback, errback) {
   var params = {
     "hub.mode"      : mode,
-    "hub.verify"    : config.pubsubhubbub.verify_mode,
-    "hub.callback"  : feed.callback_url,
-    "hub.topic"     : feed.url
+    "hub.verify"    : verify,
+    "hub.callback"  : callback_url,
+    "hub.topic"     : topic
   };
-  
-  var hub_url = hub || config.pubsubhubbub.hub;
   
   var body = querystring.stringify(params)
       hub = url.parse(hub_url),
@@ -30,31 +38,27 @@ var subscribe = function(feed, mode, hub, callback, errback) {
         "User-Agent": "Socket-Sub for Node.js",
         "Connection": "close"
       };
-  log("request body: " + body);
   var client  = http.createClient(hub.port || 80, hub.hostname );
   var request = client.request("POST", hub.pathname + (hub.search || ""), headers);
-  log("hub.pathname: " + hub.pathname)
+//  var request = client.request("POST","/subscribe", headers);
   request.write(body, 'utf8');
 
   request.addListener("response", function(response) {
-    log("in request.addListener response");
     var body = "";
     response.addListener("data", function(chunk) {
         body += chunk;
-        log("in request.addListener data");
-        log("body: " + body);
     });
     response.addListener('end', function() {
-      log("in request.addListener end");
       if(response.statusCode == (202 || 204)) {
-        log("response.statusCode: " + response.statusCode);
         callback();
       }
       else {
         errback(body);
+        log(body);
       }
     });
   });
   request.end(); // Actually Perform the request
 }
 
+exports.subscribe = subscribe;

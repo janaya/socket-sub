@@ -1,24 +1,36 @@
 //datastructure = {
 //  _id: 0,
-//  SID: '',
+//  ClientId: '',
 //  URI: '',
 //  publishers: [{
-//    SID: '',
+//    ClientId: '',
 //    URI: '',
+//    confirmed: false;
 //  }],
 //}
 
 // Example data:
-//var item1 = {SID: "1"};
-//var item2 = {SID: "2", URI: "http://localhost/smob", publishers: [{SID: "3", URI: "http://localhost/smob"},{SID: "4", URI: "http://localhost/smob2"}]};
+//var item1 = {ClientId: "1"};
+//var item2 = {ClientId: "2", URI: "http://localhost/smob", publishers: [{ClientId: "3", URI: "http://localhost/smob"},{ClientId: "4", URI: "http://localhost/smob2"}]};
 //db.subscriptions.save(item1);
 //db.subscriptions.save(item2);
 //db.subscriptions.find();
 //db.subscriptions.find({"publishers.URI": "http://localhost/smob"});
 //db.subscriptions.find({"publishers.URI": "http://localhost/smob"}).forEach(printjson);
-//db.subscriptions.find({"publishers.URI": "http://localhost/smob"}, {SID:1})
-//db.subscriptions.find({"publishers.URI": "http://localhost/smob"}, {SID:1, _id:0}).forEach(printjson);
+//db.subscriptions.find({"publishers.URI": "http://localhost/smob"}, {ClientId:1})
+//db.subscriptions.find({"publishers.URI": "http://localhost/smob"}, {ClientId:1, _id:0}).forEach(printjson);
 
+//db.subscriptions.find({ClientId: "3243485626298934","publishers.URI": "foo"})
+
+
+//db.subscriptions.update({ClientId: "3243485626298934"},{"$push": {publishers: {URI: "foo"}}})
+
+//db.subscriptions.update({ClientId: "3243485626298934"},{"$addToSet": {publishers: {URI: "foo"}}})
+
+
+
+//db.subscriptions.update({ClientId: "3243485626298934", publishers: [] })
+//db.subscriptions.update({ClientId: "3243485626298935"},{ClientId: "3243485626298935"},true)
 
 var sys = require("sys");
 //var Db= require('mongodb/db').Db,
@@ -58,11 +70,11 @@ SubscriptionsStore.prototype.findAll = function(callback) {
     });
 };
 
-SubscriptionsStore.prototype.findBySID = function(SubscriberSID, callback) {
+SubscriptionsStore.prototype.findByClientId = function(subscriberClientId, callback) {
     this.getCollection(function(error, subscription_collection) {
       if( error ) callback(error)
       else {
-        subscription_collection.findOne({SID: SubscriberSID}, function(error, result) {
+        subscription_collection.findOne({ClientId: subscriberClientId}, function(error, result) {
           if( error ) callback(error)
           else {
             callback(null, result);
@@ -72,12 +84,31 @@ SubscriptionsStore.prototype.findBySID = function(SubscriberSID, callback) {
     });
 };
 
-
-SubscriptionsStore.prototype.findByPublisherURI = function(PublisherURI, callback) {
+SubscriptionsStore.prototype.findByPublisherURI = function(publisherURI, callback) {
     this.getCollection(function(error, subscription_collection) {
       if( error ) callback(error)
       else {
-        subscription_collection.find({"publishers.URI": PublisherURI}, {SID:1, _id:0}, function(error, cursor) {
+        subscription_collection.find({"publishers.URI": publisherURI}, {ClientId:1, _id:0}, function(error, cursor) {
+          if( error ) callback(error)
+          else {
+//            for (subscriber in cursor) {
+//            
+//            }
+            cursor.toArray(function(error, results) {
+              if( error ) callback(error)
+              else callback(null, results)
+            });
+          }
+        });
+      }
+    });
+};
+
+SubscriptionsStore.prototype.findByPublisherURInotconfirmed = function(publisherURI, callback) {
+    this.getCollection(function(error, subscription_collection) {
+      if( error ) callback(error)
+      else {
+        subscription_collection.find({"publishers.URI": publisherURI, "publishers.confirmed": false}, {ClientId:1, _id:0}, function(error, cursor) {
           if( error ) callback(error)
           else {
 //            for (subscriber in cursor) {
@@ -95,49 +126,58 @@ SubscriptionsStore.prototype.findByPublisherURI = function(PublisherURI, callbac
 
 SubscriptionsStore.prototype.save = function(subscription, callback) {
     this.getCollection(function(error, subscription_collection) {
-      sys.puts("got collection "+subscription_collection);
       if( error ) callback(error)
       else {        
-        subscription_collection.findOne({SID: subscription.SID}, function(error, result) {
-          if( error ) callback(error)
+        //db.subscriptions.update({ClientId: "3243485626298935"},{ClientId: "3243485626298935"},true)
+        subscription_collection.update(subscription, subscription, {upsert:true, safe:true}, function(error, numbersubscriptions) {
+          if( error ) callback(error);
           else {
-            sys.puts("no error in find");
-            if (result) {
-              sys.puts("result "+result);
-              callback(null, result);
-            } else {
-              if( subscription.publishers === undefined ) subscription.publishers = [];
-
-              subscription_collection.insert(subscription, function() {
-                sys.puts("subscription:  "+subscription);
-                callback(null, subscription);
-              });
-            }
+            sys.puts("subscription succesfully stored or retrieved:  "+sys.inspect(subscription));
+            callback(null, subscription);
           }
         });
-        
       }
     });
 };
 
-SubscriptionsStore.prototype.addPublisherToSubscriber = function(subscriberSID, publisher, callback) {
-  sys.puts(subscriberSID, publisher.URI);
+SubscriptionsStore.prototype.addPublisherToSubscriber = function(subscriberClientId, publisher, callback) {
   this.getCollection(function(error, subscription_collection) {
     if( error ) callback( error );
     else {
-      sys.puts("got collection "+subscription_collection);
-      subscription_collection.update(
-        //{_id: ObjectID.createFromHexString(subscriptionId)},
-        {SID: subscriberSID},
-        {"$push": {publishers: publisher}},
+      //db.subscriptions.update({ClientId: "3243485626298934"},{"$addToSet": {publishers: {URI: "foo"}}})
+      subscription_collection.findAndModify(
+        {ClientId: subscriberClientId}, [],
+        {"$addToSet": {publishers: publisher}}, {new:true}, 
         function(error, subscription){
           if( error ) callback(error);
           else {
-            sys.puts("subscription:  "+subscription);
+            sys.puts("publisher succesfully stored or retrieved from subscriber:  "+sys.inspect(subscription));
             callback(null, subscription);
           }
         });
     }
   });
 };
+
+
+SubscriptionsStore.prototype.confirmByPublisherURI = function(publisherURI, callback) {
+    this.getCollection(function(error, subscription_collection) {
+      if( error ) callback(error)
+      else {
+        subscription_collection.findAndModify(
+          {"publishers.URI": publisherURI, "publishers.confirmed": false}, [],
+          {"$set": {"publishers.confirmed": true}}, {new:true}, //, {ClientId:1, _id:0}
+          function(error, cursor) {
+            if( error ) callback(error)
+            else {
+              cursor.toArray(function(error, results) {
+                if( error ) callback(error)
+                else callback(null, results)
+              });
+            }
+        });
+      }
+    });
+};
+
 exports.SubscriptionsStore = SubscriptionsStore;
