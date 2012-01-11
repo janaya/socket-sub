@@ -17,6 +17,7 @@ var fs = require("fs"),
     sockets_store = new SocketsStore(),
     SubscriptionsStore= require('./subscriptions-mongodb').SubscriptionsStore,
     subscriptionsStore= new SubscriptionsStore('localhost', 27017),
+    webid_check = require("./webid_check.js"),
     app = express.createServer();
 
 var config = JSON.parse(fs.readFileSync("./config.json", "utf8") ) || JSON.parse(fs.readFileSync("./default_config.json", "utf8") );
@@ -120,7 +121,7 @@ ws_server.on("connection", function(client) {
         //  socket.emit('ready');
         //});
         //session_store.set(client.sessionId, subscription.ClientId);
-        log("cookie stored in mem" + sys.inspect(session_store));
+        //log("cookie stored in mem" + sys.inspect(session_store));
       });
     }
   });
@@ -146,7 +147,8 @@ ws_server.on("connection", function(client) {
         // TODO: get publisher clientId to create callback_url and store also the clientId
         
         // HTTP POST REQUEST TO hub_url {"hub.mode":"subscribe","hub.verify":"async","hub.callback":callback_url","hub.topic": json["hub.topic"]}     
-        hub.subscribe(hub_url, "subscribe", "sync", callback_url, json["hub.topic"], function() {
+        // hub.foaf should be the socket server foaf?, store the client foaf too
+        hub.subscribe(hub_url, "subscribe", "sync", callback_url, json["hub.topic"], json["hub.foaf"],function() {
           // SOCKET SEND subscription was requested
           client.send("Asked subscription to " + json["hub.topic"]);
           log("Asked subscription for socket "+socketsid.socketId+" with cookie "+socketsid.clientId+" to " + json["hub.topic"]);
@@ -238,27 +240,33 @@ web_server.get(
     var topic_url = params['hub.topic'] || null;
     var mode = params['hub.mode'] || null;
     var challenge = params['hub.challenge'] || null;
+    //var foaf = params['hub.foaf'] || null;
     
     // get publisher socket id by topic_url
     
     // PERSISTENT STORE: get which subsribers asked to subscribe to that publisher 
     subscriptionsStore.findByPublisherURInotconfirmed(topic_url, function(error, subscribers) {
+      log("subscribers that asked to subscribe to topic_url " + topic_url);
+      log(sys.inspect(subscribers));
       if (subscribers && (mode == "subscribe" || mode == "unsubscribe")) {
-        for (subscriber in subscribers) {
+        for (var i in subscribers) {
+          var subscriber = subscribers[i];
           log("subcriber with pending subscriptions: "+sys.inspect(subscriber));
           // TODO: if socket not online, not confirm
-          var socket = ws_server.clientsIndex[get_socketclient_from_clientId(subscriber.ClientId)]
+          var socket = ws_server.clientsIndex[sockets_store.get_socketclient_from_clientId(subscriber.ClientId)]
+          log("socket with pending subscriptions" + sys.inspect(socket));
           if (socket) {
-            // set confirm: true
-            subscriptionsStore.confirmByPublisherURI(topic_url, function(error, subscribers) {
-              log("Confirmed subscriptions: "+sys.inspect(subscribers));
-            });
-            // SOCKET SEND CONFIRMATION TO SUBSCRIBER
-            socket.send("Confirmed subscription");
             
             // HTTP RESPONSE TO hub_url with challenge
             res.send(challenge, 200);
             log("Sent: " + challenge);
+            
+            // set confirm: true
+            subscriptionsStore.confirmBySubscription(subscriber, function(error, subscriber) {
+              log("Confirmed subscriptions: "+sys.inspect(subscriber));
+            });
+            // SOCKET SEND CONFIRMATION TO SUBSCRIBER
+            socket.send("Confirmed subscription");
           } else {
             // Socket is offline, couldn't confirm
             
@@ -338,6 +346,22 @@ web_server.post(
       }
     });
 });
+
+web_server.post("/foaf",
+  function(req, res) {
+    log("WEB SERVER FOAF POST REQUEST");
+    //when content-type: application/x-www-form-urlencoded;
+    if (req.headers['content-type'] == "application/x-www-form-urlencoded") {
+      params = req.body;
+    } else {
+      params = req.query;
+    }
+    // verify the PubSubHubbub server WebID
+    var cert_uri = params['cert_uri'] || null;
+    var webid_uri = params['webid_uri'] || null;
+    r = webid_check.validate_webid(cert_uri);
+    log("result of webid validation: " + r);
+}
 
 web_server.addListener("listening", function() {
   var hostInfo = config.pubsubhubbub.listen.host + ":" + config.pubsubhubbub.listen.port.toString();

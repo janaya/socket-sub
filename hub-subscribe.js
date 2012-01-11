@@ -1,10 +1,10 @@
 var fs = require("fs"),
-    express = require("express"),
+    //express = require("express"),
     sys = require("sys"),
     http = require("http")
     querystring = require("querystring"),
-    url = require("url"),
-    base64 = require("./deps/base64");
+    url = require("url");
+    //base64 = require("./deps/base64");
 var config = JSON.parse(fs.readFileSync("./config.json", "utf8") ) || JSON.parse(fs.readFileSync("./default_config.json", "utf8") );
 var log = function(message) {
   if(config.debug) {
@@ -18,12 +18,13 @@ var log = function(message) {
 //
 // Main PubSubHubub method. Peforms the subscription and unsubscriptions
 // It uses the credentials defined earlier.
-var subscribe = function(hub_url, mode, verify, callback_url, topic, callback, errback) {
+var subscribe = function(hub_url, mode, verify, callback_url, topic, foaf, callback, errback) {
   var params = {
     "hub.mode"      : mode,
     "hub.verify"    : verify,
     "hub.callback"  : callback_url,
-    "hub.topic"     : topic
+    "hub.topic"     : topic,
+    "hub.foaf"      : foaf
   };
   
   var body = querystring.stringify(params)

@@ -108,7 +108,8 @@ SubscriptionsStore.prototype.findByPublisherURInotconfirmed = function(publisher
     this.getCollection(function(error, subscription_collection) {
       if( error ) callback(error)
       else {
-        subscription_collection.find({"publishers.URI": publisherURI, "publishers.confirmed": false}, {ClientId:1, _id:0}, function(error, cursor) {
+//        subscription_collection.find({"publishers.URI": publisherURI, "publishers.confirmed": false}, {ClientId:1, _id:0}, function(error, cursor) {
+        subscription_collection.find({"publishers.URI": publisherURI, "publishers.confirmed": false}, function(error, cursor) {
           if( error ) callback(error)
           else {
 //            for (subscriber in cursor) {
@@ -176,6 +177,25 @@ SubscriptionsStore.prototype.confirmByPublisherURI = function(publisherURI, call
               });
             }
         });
+      }
+    });
+};
+
+
+SubscriptionsStore.prototype.confirmBySubscription = function(subscription, callback) {
+    this.getCollection(function(error, subscription_collection) {
+      if( error ) callback(error)
+      else {
+        subscription_collection.findAndModify(
+          subscription, [],
+          {"$set": {"publishers.confirmed": true}}, {new:true}, //, {ClientId:1, _id:0}
+          function(error, subscription) {
+            if( error ) callback(error)
+            else {
+                callback(null, subscription);
+            }
+          }
+        );
       }
     });
 };
