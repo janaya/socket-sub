@@ -19,6 +19,8 @@ var log = function(message) {
 // Main PubSubHubub method. Peforms the subscription and unsubscriptions
 // It uses the credentials defined earlier.
 var subscribe = function(hub_url, mode, verify, callback_url, topic, foaf, callback, errback) {
+  log("callback_url" + callback_url);
+  log("foaf" + foaf);
   var params = {
     "hub.mode"      : mode,
     "hub.verify"    : verify,

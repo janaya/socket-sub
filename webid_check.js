@@ -15,6 +15,7 @@ var http = require('http');
 var sys = require('sys');
 var urllib = require('url');
 //var ws = require('./deps/websocket/ws');
+var rdfparser = require("./deps/parser.js");
 
 // remove xmlns from input
 var normalizeNs = function(input, ns)
@@ -83,9 +84,25 @@ var normalizeNs = function(input, ns)
    return rval;
 };
 
+var getPublicKeyParser = function(data, uri, callback) {
+  var rsaNS="http://www.w3.org/ns/auth/rsa#"
+  var myRDF=new RDF();
+  myRDF = rdfParser.getRDFURL(uri, function() {
+    var keys=[];
+    key = myRDF.Match(null,null,rsaNS+"modulus",null);
+    
+     keys.push(
+     {
+        modulus: graph[props[modulus]][hex],
+        exponent: graph[props[exponent]][decimal]
+     });
+    callback(keys);
+  });
+}
+
 // gets public key from WebID rdf
-var getPublicKey = function(data, uri, callback)
-{
+var getPublicKey = function(data, uri, callback) {
+   sys.log("FOAF uri " + uri);
    // FIXME: use RDF library to simplify code below
    //var kb = new rdf.RDFParser(rdf.IndexedFormula(), uri).loadBuf(data);
    //var CERT = rdf.Namespace('http://www.w3.org/ns/auth/cert#');
@@ -126,8 +143,14 @@ var getPublicKey = function(data, uri, callback)
          resource in node[key]['@'])
       {
          rval = node[key]['@'][resource];
+         if ('#' in node[key] && resource2 in node[key]['#']){
+           rval[resource] = resource2;
+         }
       }
-      
+      //FIXME: hackish
+//      else {
+//        rval = node[key]['#'];
+//      }
       return rval;
    };
    
@@ -137,6 +160,7 @@ var getPublicKey = function(data, uri, callback)
    var parser = new xml2js.Parser();
    parser.addListener('end', function(result)
    {
+      sys.log("parser result" + sys.inspect(result));
       // normalize namespaces
       result = normalizeNs(result, {});
       
@@ -144,6 +168,7 @@ var getPublicKey = function(data, uri, callback)
       var keys = [];
       if(desc in result)
       {
+         sys.log("desc in result");
          // normalize RDF descriptions to array
          if(result[desc].constructor !== Array)
          {
@@ -153,21 +178,25 @@ var getPublicKey = function(data, uri, callback)
          {
             desc = result[desc];
          }
-         
+         sys.log("descriptions" + sys.inspect(desc));
          // collect properties for all resources 
          var graph = {};
          for(var i = 0; i < desc.length; ++i)
          {
             var node = desc[i];
+            sys.log("node " + sys.log(node));
             var res = {};
             for(var key in node)
             {
+               sys.log("key " + sys.inspect(key));
                var obj = getResource(node, key);
+               sys.log("obj " + sys.inspect(obj));
                res[key] = (obj === null) ? node[key] : obj;
             }
+            sys.log("res " + sys.inspect(res));
             graph[getResource(node, about) || ''] = res;
          }
-         
+         sys.log("graph " + sys.inspect(graph));
          // for every public key w/identity that matches the uri hash
          // save the public key modulus and exponent
          for(var r in graph)
@@ -200,14 +229,12 @@ var getPublicKey = function(data, uri, callback)
 };
 
 // compares two public keys for equality
-var comparePublicKeys = function(key1, key2)
-{
+var comparePublicKeys = function(key1, key2) {
    return key1.modulus === key2.modulus && key1.exponent === key2.exponent;
 };
 
 // gets the RDF data from a URL
-var fetchUrl = function(url, callback, redirects)
-{
+var fetchUrl = function(url, callback, redirects) {
    // allow 3 redirects by default
    if(typeof(redirects) === 'undefined')
    {
@@ -217,9 +244,10 @@ var fetchUrl = function(url, callback, redirects)
    sys.log('Fetching URL: \"' + url + '\"');
    
    // parse URL
-   url = forge.util.parseUrl(url);
+   //FIXME: hardcoding url to match certificate
+   url = forge.util.parseUrl("http://localhost:8002/me");
    var client = http.createClient(
-      url.port, url.fullHost, url.scheme === 'https');
+      url.port, url.host);//, url.scheme === 'https');
    var request = client.request('GET', url.path,
    {
       'Host': url.host,
@@ -266,12 +294,11 @@ var fetchUrl = function(url, callback, redirects)
 };
 
 // does WebID authentication
-var authenticateWebId = function(c, state)
-{
+var authenticateWebId = function(cert, state) {
    var auth = false;
    
    // get client-certificate
-   var cert = c.peerCertificate;
+   //var cert = c.peerCertificate;
    
    // get public key from certificate
    var publicKey =
@@ -309,12 +336,13 @@ var authenticateWebId = function(c, state)
          if(altNames.length === 0)
          {
             sys.log('WebID authentication FAILED.');
-            c.prepare(JSON.stringify(
-            {
-               success: false,
-               error: 'Not Authenticated'
-            }));
-            c.close();
+              return false;
+//            c.prepare(JSON.stringify(
+//            {
+//               success: false,
+//               error: 'Not Authenticated'
+//            }));
+//            c.close();
          }
          // try next alt name
          else
@@ -323,9 +351,11 @@ var authenticateWebId = function(c, state)
             var url = altNames.shift();
             fetchUrl(url, function(body)
             {
+               sys.log("FOAF fetched: " + body);
                // get public key
                getPublicKey(body, url, function(keys)
                {
+                  sys.log("keys found " + sys.inspect(keys));
                   // compare public keys from RDF until one matches
                   for(var i = 0; !auth && i < keys.length; ++i)
                   {
@@ -336,16 +366,17 @@ var authenticateWebId = function(c, state)
                      // send authenticated notice to client
                      sys.log('WebID authentication PASSED.');
                      state.authenticated = true;
-                     c.prepare(JSON.stringify(
-                     {
-                        success: true,
-                        cert:
-                        {
-                           subject: cert.subject
-                        },//certforge.pki.certificateToPem(cert),
-                        webID: url,
-                        rdf: forge.util.encode64(body)
-                     }));
+                     return true;
+//                     c.prepare(JSON.stringify(
+//                     {
+//                        success: true,
+//                        cert:
+//                        {
+//                           subject: cert.subject
+//                        },//certforge.pki.certificateToPem(cert),
+//                        webID: url,
+//                        rdf: forge.util.encode64(body)
+//                     }));
                   }
                   else
                   {
@@ -362,18 +393,57 @@ var authenticateWebId = function(c, state)
    authNext();
 };
 
-var validate_webid = function(cert) {
-  //var cert = forge.pki.certificateFromPem();
-  try
-     {
-        authenticateWebId(cert, false);
-        return true;
-     }
-     catch(ex)
-     {
-        cert.close();
-        return false
-     }
-}
-module.exports = webid_check;
+
+var fetchCert = function(cert_url, callback) {
+  // parse URL
+  var url = forge.util.parseUrl(cert_url);
+  sys.log("" + url.port + url.fullHost + url.path + url.host);
+  var client = http.createClient(
+    url.port, url.host);
+  var request = client.request('GET', url.path, {
+    'Host': url.host,
+    //'Accept': 'application/rdf+xml'
+  });
+  request.addListener('response', function(response) {
+    var body = '';
+    
+    // error, return empty body
+    if(response.statusCode >= 400)
+    {
+       callback(body);
+    }
+    // handle data
+    else
+    {
+       response.setEncoding('utf8');
+       response.addListener('data', function(chunk)
+       {
+          body += chunk;
+       });
+       response.addListener('end', function()
+       {
+          callback(body);
+       });
+    }
+  });
+  request.end();
+};
+
+var validate_webid = function(cert_url) {
+  sys.log("validating webid for cert url " + cert_url);
+  fetchCert(cert_url, function(body) {
+    sys.log("cert: " + body);
+    //var x509 = new X509();
+    //x509.readCertPEM(_PEM_X509CERT_STRING_);
+    var cert = forge.pki.certificateFromPem(body, true);
+    try {
+          authenticateWebId(cert, false);
+          return true;
+    } catch(ex) {
+          return false
+    }
+  });
+};
+
+exports.validate_webid = validate_webid;
 

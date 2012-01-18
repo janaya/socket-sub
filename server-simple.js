@@ -25,6 +25,7 @@ var config = JSON.parse(fs.readFileSync("./config.json", "utf8") ) ||
 var callback_url = config.pubsubhubbub.callback_url_root + 
   config.pubsubhubbub.callback_url_path;
 var hub_url = config.pubsubhubbub.hub;
+var foaf_uri = config.pubsubhubbub.hub;
 
 var log = function(message) {
   if(config.debug) {
@@ -54,128 +55,53 @@ app.listen(config.websocket.listen.port, function () {
 });
 
 var ws_server = io.listen(app);
-//log("SOCKET SERVER listening");
 
 
 // SOCKET STABLISHED
-ws_server.on("connection", function(client) {
+ws_server.sockets.on("connection", function(client) {
   log("SOCKET STABLISHED");
-  log("Client.sessionid: "+client.sessionId);
+  log("Client.sessionid: "+client.id);
+  log("client.handshake "+sys.inspect(client.handshake));
+  log("client.handshake.address "+client.handshake.headers.origin);
+  log("client.handshake.address "+client.handshake.address.address);
   
-  // For now, processing cookies like socket messages...
-  
-  // SOCKET RECEIVED FIRST MESSAGE
-  client.once("message", function(data) {
-    log("SOCKET RECEIVED FIRST MESSAGE: " + sys.inspect(data));
-    
-    // COOKIE RECEIVED
-    if (data.ClientId) {
-      log("COOKIE RECEIVED: "+data.ClientId);     
-      // PERSISTENT STORE: find cookie
-      subscriptionsStore.findByClientId(data.ClientId, 
-        function(error, subscription){
-        log("found cookie in store:"+sys.inspect(subscription));
-        // MEMORY STORE: map socket to cookie
-        var socket_clientid = sockets_store.add_socketclient(
-          client.sessionId,subscription.ClientId);
-        log("mapped in memory socket id to cookie: " +
-          sys.inspect(socket_clientid));
-      });
-    
-    // NO COOKIE RECEIVED
-    } else {
-      log("NO COOKIE RECEIVED");     
-      // SOCKET SEND COOKIE
-      client.send(JSON.stringify({"ClientId": client.sessionId}) );
-      log("SOCKET SEND COOKIE");
-      // PERSISTENT STORE: save cookie
-      subscriptionsStore.save({ClientId: client.sessionId}, 
-        function(error, subscription){
-        log("found cookie in store:"+sys.inspect(subscription));
-        // MEMORY STORE: map socket to cookie
-        var socket_clientid = sockets_store.add_socketclient(
-          client.sessionId,subscription.ClientId);
-        log("mapped in memory socket id to cookie: " +
-          sys.inspect(socket_clientid));
-      });
-    }
+  client.on("init", function(data){
+    log("domain ");
+    ws_server.sockets.sockets[client.id].json.send(data);
+    client.set('domain', data.domain, function () {
+      log(data.domain);
+    });
   });
 
 
   // SOCKET RECEIVED MESSAGE
-  client.on("message", function(data) {
-    log("Message received: "+sys.inspect(data));
-    
-    try {
-      // if json
-      var json = JSON.parse(data);
-      if (json["hub.topic"]) {
-        // SUBSCRIPTION REQUEST 
-        var socketsid = sockets_store.get_socketclient(client.sessionId);
-
-        log("Subscribing socket " + socketsid.socketId + " with cookie " +
-          socketsid.clientId + " to " + json["hub.topic"]);
-        
-        // PERSISTENT STORE: store foaf to ask it later and send it to the hub
-        subscriptionsStore.addFOAFToSubscriber(socketsid.clientId, 
-            json["hub.foaf"], 
-            function(error, subscription) {
-          log("subscription: "+sys.inspect(subscription));
-        });
-        
-        // HTTP POST REQUEST TO hub_url {"hub.mode":"subscribe",
-        //  "hub.verify":"async","hub.callback":callback_url",
-        // "hub.topic": json["hub.topic"]}
-        hub.subscribe(hub_url, "subscribe", "sync", callback_url+json["hub.callback"], 
-          json["hub.topic"], 
-          json["hub.foaf"],
-          // webid should be a public url,
-          // but private FOAF is in the client
-          //"http://localhost/8080/foaf/"+ socketsid.clientId, 
-          function() {
-          // SOCKET SEND subscription was requested
-          client.send("Asked subscription to " + json["hub.topic"]);
-          log("Asked subscription for socket " + socketsid.socketId +
-            " with cookie "+socketsid.clientId+" to " + json["hub.topic"]);
-
-          // PERSISTENT STORE: if subscription succesful
-          subscriptionsStore.addPublisherToSubscriber(socketsid.clientId, 
-            {URI: json["hub.topic"], confirmed:false}, 
-              function(error, subscription) {
-            log("subscription: "+sys.inspect(subscription));
-          });
-        }, function(error) {    
-//          // SOCKET SEND subscription could not be requested
-//          client.send("Could not ask subscription to " + json["hub.topic"]);
-//          log("Could not ask subscription for socket " + socketsid.socketId +
-//              " with cookie " + socketsid.clientId+" to " + 
-//              json["hub.topic"] +"with error: " + error);
-        });
-
-      } else if (json.GET) {
-        if (json.GET == "followings") {
-          var socketsid = sockets_store.get_socketclient(client.sessionId);
-          
-          log("Get followings for socket "+ socketsid.socketId + 
-            " with cookie " + socketsid.clientId);
-          subscriptionsStore.findByClientId(socketsid.clientId, 
-            function(error, subscription) {
-            log("subscription: "+sys.inspect(subscription));
-            client.send(JSON.stringify(subscription.publishers) || "");
-          });
-
-        }
-      }
-    } catch(err) {
-      log("no json, : " + err);
-    }
+  client.on("subscribe", function(from, json) {
+    log("from " + from);
+    log("Message received: "+sys.inspect(json));
+    log(json["hub.callback"]);
+    // HTTP POST REQUEST TO hub_url {"hub.mode":"subscribe",
+    //  "hub.verify":"async","hub.callback":callback_url",
+    // "hub.topic": json["hub.topic"]}
+    hub.subscribe(hub_url, "subscribe", "sync", callback_url+json["hub.callback"], 
+      json["hub.topic"], 
+      foaf_uri + json["hub.foaf"], 
+      function() {
+      // SOCKET SEND subscription was requested
+      ws_server.sockets.sockets[client.id].json.send(
+        "Asked subscription to " + json["hub.topic"]);
+        //client.send("Asked subscription to " + json["hub.topic"]);
+        log("Asked subscription for socket " + client.id +
+        " with cookie "+client.id+" to " + json["hub.topic"]);
+      }, function(error) {
+        log("Something wrong in the subscription")
+    });
   });
-  
+
+
+
   // SOCKET DISCONNECT
   client.on("disconnect", function( ) {
     log("SOCKET DISCONNECT");
-    //TODO: delete the socket id from memory
-    //TODO: delete sockets_store.delete_socketclient(client.sessionId);
   });
 
 });
@@ -200,17 +126,7 @@ web_server.get(
   "/callback/:domain", 
   function(req, res) {
     log("HTTP GET REQUEST TO callback_url");
-    log("req.headers['user-agent']"+req.headers['user-agent']);
-    log("req.headers['server']"+req.headers['server']);
     
-    //when content-type: application/x-www-form-urlencoded;
-//    if (req.headers['content-type'] == "application/x-www-form-urlencoded") {
-//      log("www-form-urlencoded");
-//      params = req.body;
-//    } else {
-//      log("no www-form-urlencoded");
-//      params = req.query;
-//    }
     params = req.body || req.query || req.params;
     log(sys.inspect(params));
     var topic_url = params['hub.topic'] || null;
@@ -234,7 +150,8 @@ web_server.get(
           log("subcriber with pending subscriptions: "+sys.inspect(subscriber));
           // TODO: if socket not online, not confirm
           var socket = ws_server.clientsIndex[
-            sockets_store.get_socketclient_from_clientId(subscriber.ClientId)]
+            sockets_store.get_socketclient_from_clientId(subscriber.ClientId)];
+          //ws_server.sockets.sockets[client.id].json.send(
           log("socket with pending subscriptions" + sys.inspect(socket));
           if (socket) {
             
@@ -336,7 +253,7 @@ web_server.post(
 });
 
 // WEB SERVER FOAF POST REQUEST
-web_server.post("/foaf:clientId'",
+web_server.post("/foaf/:clientId",
   function(req, res) {
     log("WEB SERVER FOAF POST REQUEST");
     //when content-type: application/x-www-form-urlencoded;

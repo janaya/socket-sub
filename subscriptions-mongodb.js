@@ -2,6 +2,7 @@
 //  _id: 0,
 //  ClientId: '',
 //  URI: '',
+//  foaf: '',
 //  publishers: [{
 //    ClientId: '',
 //    URI: '',
@@ -160,6 +161,23 @@ SubscriptionsStore.prototype.addPublisherToSubscriber = function(subscriberClien
   });
 };
 
+SubscriptionsStore.prototype.addFOAFToSubscriber = function(subscriberClientId, foaf, callback) {
+    this.getCollection(function(error, subscription_collection) {
+      if( error ) callback(error)
+      else {
+        subscription_collection.findAndModify(
+          {ClientId: subscriberClientId}, [],
+          {"$set": {"publishers.confirmed": true}}, {new:true},
+        function(error, subscription){
+          if( error ) callback(error);
+          else {
+            sys.puts("foaf succesfully stored or retrieved from subscriber:  "+sys.inspect(subscription));
+            callback(null, subscription);
+          }
+        });
+    }
+  });
+};
 
 SubscriptionsStore.prototype.confirmByPublisherURI = function(publisherURI, callback) {
     this.getCollection(function(error, subscription_collection) {
